@@ -1,6 +1,6 @@
 import streamlit as st
-from langchain_core.messages import HumanMessage
-from langgraph_backend import chatbot
+import time
+from langgraph_backend import stream_chat
 
 st.set_page_config(
     page_title="LangGraph Chatbot",
@@ -8,45 +8,65 @@ st.set_page_config(
     layout="centered",
 )
 
-st.title("💬 CHATBOT BY PAWAN")
+#st.title("💬 CHATBOT BY PAWAN")
+st.markdown(
+    """
+    <style>
+    .main-title {
+        font-family: "Trebuchet MS", sans-serif;
+        font-size: 40px;
+        font-weight: 700;
+        text-align: center;
+        letter-spacing: 1px;
+        margin-top: -20px;
+        margin-bottom: 30px;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True
+)
 
-# The same thread_id lets LangGraph's checkpointer retain the conversation.
-CONFIG = {"configurable": {"thread_id": "thread-1"}}
+st.markdown(
+    '<h1 class="main-title">💬 CHATBOT BY PAWAN</h1>',
+    unsafe_allow_html=True
+)
+
+THREAD_ID = "thread-1"
 
 if "message_history" not in st.session_state:
     st.session_state["message_history"] = []
 
-# Display previous messages.
 for message in st.session_state["message_history"]:
     with st.chat_message(message["role"]):
-        st.write(message["content"])
+        st.markdown(message["content"])
 
 user_input = st.chat_input("Type your message...")
 
 if user_input:
-    # Display and store the user's message.
     st.session_state["message_history"].append(
         {"role": "user", "content": user_input}
     )
 
     with st.chat_message("user"):
-        st.write(user_input)
+        st.markdown(user_input)
 
-    try:
-        response = chatbot.invoke(
-            {"messages": [HumanMessage(content=user_input)]},
-            config=CONFIG,
-        )
+    with st.chat_message("assistant"):
+        response_placeholder = st.empty()
+        full_response = ""
 
-        # LangGraph returns the state under the "messages" key.
-        ai_message = response["messages"][-1].content
+        try:
+            for chunk in stream_chat(user_input, thread_id=THREAD_ID):
+                for char in chunk:
+                    full_response += char
+                    response_placeholder.markdown(full_response + " ")
+                    time.sleep(0.02)
 
-        st.session_state["message_history"].append(
-            {"role": "assistant", "content": ai_message}
-        )
+            response_placeholder.markdown(full_response)
 
-        with st.chat_message("assistant"):
-            st.write(ai_message)
+            st.session_state["message_history"].append(
+                {"role": "assistant", "content": full_response}
+            )
 
-    except Exception as e:
-        st.error(f"Error while calling the LLM: {e}")
+        except Exception as e:
+            response_placeholder.empty()
+            st.error(f"Error while calling the LLM: {e}")
